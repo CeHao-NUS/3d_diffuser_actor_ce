@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args":[
+                "--calvin_dataset_path", "calvin/dataset/task_ABC_D",
+                "--calvin_model_path", "calvin/calvin_models",
+                "--text_encoder", "clip",
+                "--text_max_length", "16",
+                "--tasks", "A B C D",
+                "--backbone", "clip",
+                "--gripper_loc_bounds", "tasks/calvin_rel_traj_location_bounds_task_ABC_D.json",
+                "--gripper_loc_bounds_buffer", "0.01",
+                "--calvin_gripper_loc_bounds", "calvin/dataset/task_ABC_D/validation/statistics.yaml",
+                "--embedding_dim", "192",
+                "--action_dim", "7",
+                "--use_instruction", "1",
+                "--rotation_parametrization", "6D",
+                "--diffusion_timesteps", "25",
+                "--interpolation_length", "20",
+                "--num_history", "3",
+                "--relative_action", "1",
+                "--fps_subsampling_factor", "3",
+                "--lang_enhanced", "1",
+                "--save_video", "0",
+                "--base_log_dir", "train_logs/Planner_Calvin/pretrained/eval_logs/",
+                "--quaternion_format", "wxyz",
+                "--checkpoint", "train_logs/diffuser_actor_calvin.pth"
+            ],
+            
+            "env": {
+                "PYTHONPATH": "/home/siyuan/siyuan/github_space/3d_diffuser_actor_ce:${env:PYTHONPATH}"
+            }
+        }
+    ]
+}
+

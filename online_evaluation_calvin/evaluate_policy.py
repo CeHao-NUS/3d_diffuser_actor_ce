@@ -187,8 +187,8 @@ def evaluate_sequence(env, model, task_checker, initial_state, eval_sequence,
 
         if success:
             success_counter += 1
-        else:
-            return success_counter, video_aggregators
+        # else:
+        #     return success_counter, video_aggregators
     return success_counter, video_aggregators
 
 
@@ -209,6 +209,7 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
     """
     video = [] # show video for debugging
     obs = env.get_obs()
+    start_obs = obs.copy()
 
     model.reset()
     start_info = env.get_info()
@@ -217,6 +218,28 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
     print(f'task: {lang_annotation}')
     video.append(obs["rgb_obs"]["rgb_static"])
 
+    obj_list =['red', 'blue', 'pink', 'sliding', 'drawer', 'light']
+    obj_poses = {
+        'red': obs["scene_obs"][6:9],
+        'blue': obs["scene_obs"][12:15],
+        'pink': obs["scene_obs"][18:21],
+        'sliding': np.array([-0.08679207, -0.0115027 ,  0.54333853]),
+        'drawer': np.array([0.1826129 , -0.31640463,  0.374497]),
+        'light': np.array([0.28250775, 0.04571411, 0.58569364]),
+        }
+    target_obj = None
+    for obj in obj_list:
+        if obj in lang_annotation:
+            target_obj = obj
+            break
+
+    if target_obj is not None:
+        print('!!! target object:', target_obj)
+    else:
+        print('!!! no target object')
+
+    pre_leading = True
+
     pbar = tqdm(range(EP_LEN))
     for step in pbar:
         obs = prepare_visual_states(obs, env)
@@ -224,6 +247,7 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
         lang_embeddings = model.encode_instruction(lang_annotation, model.args.device)
         with torch.cuda.amp.autocast():
             trajectory = model.step(obs, lang_embeddings)
+
         for act_ind in range(min(trajectory.shape[1], EXECUTE_LEN)):
             # calvin_env executes absolute action in the format of:
             # [[x, y, z], [euler_x, euler_y, euler_z], [open]]
@@ -232,10 +256,34 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
                 trajectory[0, act_ind, 3:6],
                 trajectory[0, act_ind, [6]]
             ]
+
+            # change as the object is:
+            if pre_leading and target_obj is not None:
+                
+                to_obj_dist = np.linalg.norm(curr_action[0] - obj_poses[target_obj])
+                if to_obj_dist < 0.1:
+                    pre_leading = False
+                    print('the object is leading now')
+                else:
+                    ratio = 0.5
+                    curr_action[0] = ratio * curr_action[0] + (1 - ratio) * obj_poses[target_obj]
+
+
             pbar.set_description(f"step: {step}")
             curr_proprio = obs['proprio']
             obs, _, _, current_info = env.step(curr_action)
             obs['proprio'] = curr_proprio
+
+            # check if scene in start info is different from current info.
+            # change = start_obs["scene_obs"] - obs["scene_obs"]
+            # change_diff = np.linalg.norm(change)
+
+            # no_change = change_diff < 0.1
+            # if not no_change:
+            #     print('the state changed now', np.where(np.abs(change)>0.01))
+
+
+
 
             # check if current step solves a task
             current_task_info = task_oracle.get_task_info_for_set(
@@ -245,6 +293,7 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
             video.append(obs["rgb_obs"]["rgb_static"])
 
             if len(current_task_info) > 0:
+                print('*** task successful***')
                 return True, video
 
     return False, video
@@ -285,8 +334,12 @@ def main(args):
     # evaluate a custom model
     model = create_model(args)
 
+    # sequence_indices = [
+    #     i for i in range(args.local_rank, NUM_SEQUENCES, int(os.environ["WORLD_SIZE"]))
+    # ]
+
     sequence_indices = [
-        i for i in range(args.local_rank, NUM_SEQUENCES, int(os.environ["WORLD_SIZE"]))
+        i for i in range(0, NUM_SEQUENCES, 1)
     ]
 
     env = make_env(args.calvin_dataset_path, show_gui=False)
@@ -309,13 +362,13 @@ def main(args):
 
 if __name__ == "__main__":
     args = Arguments().parse_args()
-    args.local_rank = int(os.environ["LOCAL_RANK"])
+    # args.local_rank = int(os.environ["LOCAL_RANK"])
 
     # DDP initialization
-    torch.cuda.set_device(args.local_rank)
-    torch.distributed.init_process_group(backend='nccl', init_method='env://')
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.deterministic = True
+    # torch.cuda.set_device(args.local_rank)
+    # torch.distributed.init_process_group(backend='nccl', init_method='env://')
+    # torch.backends.cudnn.enabled = True
+    # torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.deterministic = True
 
     main(args)
