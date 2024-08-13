@@ -227,55 +227,55 @@ def rollout(env, model, task_oracle, subtask, lang_annotation, use_inpainting=Fa
     model.reset()
     start_info = env.get_info()
 
-    print('------------------------------')
-    print(f'task: {lang_annotation}')
-    video.append(obs["rgb_obs"]["rgb_static"])
+    # print('------------------------------')
+    # print(f'task: {lang_annotation}')
+    # video.append(obs["rgb_obs"]["rgb_static"])
 
-    if use_inpainting:
+    # if use_inpainting:
 
-        obj_list =['red', 'blue', 'pink', 'sliding', 'drawer','button', 'turn on the light bulb']
-        obj_poses = {
-            'red': obs["scene_obs"][6:9],
-            'blue': obs["scene_obs"][12:15],
-            'pink': obs["scene_obs"][18:21],
-            'sliding': np.array([-0.08679207, -0.0115027 ,  0.54333853]),
-            'drawer': np.array([0.1826129 , -0.31640463,  0.374497]),
-            'turn on the light bulb': np.array([0.24155065, 0.03409243, 0.55943577]),
-            'button': np.array([-0.10994109, -0.12844143,  0.48871266]),
-            }
+    #     obj_list =['red', 'blue', 'pink', 'sliding', 'drawer','button', 'turn on the light bulb']
+    #     obj_poses = {
+    #         'red': obs["scene_obs"][6:9],
+    #         'blue': obs["scene_obs"][12:15],
+    #         'pink': obs["scene_obs"][18:21],
+    #         'sliding': np.array([-0.08679207, -0.0115027 ,  0.54333853]),
+    #         'drawer': np.array([0.1826129 , -0.31640463,  0.374497]),
+    #         'turn on the light bulb': np.array([0.24155065, 0.03409243, 0.55943577]),
+    #         'button': np.array([-0.10994109, -0.12844143,  0.48871266]),
+    #         }
         
-        '''
-        turn on the lightbulb / target pose
-        [ 0.2917001 , -0.0173986 ,  0.54783777]
+    #     '''
+    #     turn on the lightbulb / target pose
+    #     [ 0.2917001 , -0.0173986 ,  0.54783777]
 
-        turn off lightbulb / target pose
-        [0.24155065, 0.03409243, 0.55943577]
-        '''
-        target_obj = None
-        target_obj_list = []
-        for obj in obj_list:
-            if obj in lang_annotation:
-                target_obj_list.append(obj)
+    #     turn off lightbulb / target pose
+    #     [0.24155065, 0.03409243, 0.55943577]
+    #     '''
+    #     target_obj = None
+    #     target_obj_list = []
+    #     for obj in obj_list:
+    #         if obj in lang_annotation:
+    #             target_obj_list.append(obj)
                 
-        if len(target_obj_list) == 1:
-            target_obj = target_obj_list[0]
-        elif len(target_obj_list) > 1:
-            print('!!! multiple target objects:', target_obj_list)
+    #     if len(target_obj_list) == 1:
+    #         target_obj = target_obj_list[0]
+    #     elif len(target_obj_list) > 1:
+    #         print('!!! multiple target objects:', target_obj_list)
         
-        if 'grasped' in lang_annotation:
-            target_obj =  None
-            print('!!! grasped object')
+    #     if 'grasped' in lang_annotation:
+    #         target_obj =  None
+    #         print('!!! grasped object')
 
-        if 'block' in lang_annotation and target_obj in ['drawer', 'sliding']:
-            target_obj = None
-            print('!!! block object to container')
+    #     if 'block' in lang_annotation and target_obj in ['drawer', 'sliding']:
+    #         target_obj = None
+    #         print('!!! block object to container')
             
-        if target_obj is not None:
-            print('!!! target object:', target_obj)
-        else:
-            print('!!! no target object')
+    #     if target_obj is not None:
+    #         print('!!! target object:', target_obj)
+    #     else:
+    #         print('!!! no target object')
 
-        pre_leading = True
+    #     pre_leading = True
 
     pbar = tqdm(range(EP_LEN))
     for step in pbar:
@@ -294,17 +294,17 @@ def rollout(env, model, task_oracle, subtask, lang_annotation, use_inpainting=Fa
                 trajectory[0, act_ind, [6]]
             ]
 
-            if use_inpainting:
-                # change as the object is:
-                if pre_leading and target_obj is not None:
+            # if use_inpainting:
+            #     # change as the object is:
+            #     if pre_leading and target_obj is not None:
                     
-                    to_obj_dist = np.linalg.norm(curr_action[0] - obj_poses[target_obj])
-                    if to_obj_dist < 0.1:
-                        pre_leading = False
-                        print('the object is leading now')
-                    else:
-                        ratio = 0.1
-                        curr_action[0] = ratio * curr_action[0] + (1 - ratio) * obj_poses[target_obj]
+            #         to_obj_dist = np.linalg.norm(curr_action[0] - obj_poses[target_obj])
+            #         if to_obj_dist < 0.1:
+            #             pre_leading = False
+            #             print('the object is leading now')
+            #         else:
+            #             ratio = 0.1
+            #             curr_action[0] = ratio * curr_action[0] + (1 - ratio) * obj_poses[target_obj]
 
 
             pbar.set_description(f"step: {step}")
