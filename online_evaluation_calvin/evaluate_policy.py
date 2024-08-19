@@ -285,9 +285,11 @@ def main(args):
     # evaluate a custom model
     model = create_model(args)
 
-    sequence_indices = [
-        i for i in range(args.local_rank, NUM_SEQUENCES, int(os.environ["WORLD_SIZE"]))
-    ]
+    # sequence_indices = [
+    #     i for i in range(args.local_rank, NUM_SEQUENCES, int(os.environ["WORLD_SIZE"]))
+    # ]
+
+    sequence_indices = [i for i in range(args.local_rank, NUM_SEQUENCES, 1)]
 
     env = make_env(args.calvin_dataset_path, show_gui=False)
     evaluate_policy(model, env,
@@ -309,13 +311,13 @@ def main(args):
 
 if __name__ == "__main__":
     args = Arguments().parse_args()
-    args.local_rank = int(os.environ["LOCAL_RANK"])
+    # args.local_rank = int(os.environ["LOCAL_RANK"])
 
     # DDP initialization
-    torch.cuda.set_device(args.local_rank)
-    torch.distributed.init_process_group(backend='nccl', init_method='env://')
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.deterministic = True
+    # torch.cuda.set_device(args.local_rank)
+    # torch.distributed.init_process_group(backend='nccl', init_method='env://')
+    # torch.backends.cudnn.enabled = True
+    # torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.deterministic = True
 
     main(args)
