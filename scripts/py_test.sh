@@ -51,6 +51,7 @@ python online_evaluation_calvin/evaluate_policy.py \
     --fps_subsampling_factor $fps_subsampling_factor \
     --lang_enhanced $lang_enhanced \
     --save_video 0 \
-    --base_log_dir train_logs/${main_dir}/${run_log_dir}/eval_logs/ \
+    --base_log_dir train_logs/${main_dir}/${run_log_dir}/eval_logs_seed3/ \
     --quaternion_format $quaternion_format \
-    --checkpoint train_logs/diffuser_actor_calvin_nohistory.pth
+    --checkpoint train_logs/diffuser_actor_calvin_nohistory.pth \
+    --seed 3

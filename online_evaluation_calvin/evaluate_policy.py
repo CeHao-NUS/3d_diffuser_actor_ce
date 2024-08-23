@@ -121,7 +121,8 @@ def evaluate_policy(model, env, conf_dir, eval_log_dir=None, save_video=False,
             env, model, task_oracle, initial_state,
             eval_sequence, val_annotations, save_video
         )
-        write_results(eval_log_dir, seq_ind, result)
+        report_index = result if result < 5 else 4
+        write_results(eval_log_dir, seq_ind, result, eval_sequence[report_index], val_annotations[eval_sequence[report_index]])
         results.append(result)
         str_results = (
             " ".join([f"{i + 1}/5 : {v * 100:.1f}% |"
@@ -289,7 +290,7 @@ def main(args):
     #     i for i in range(args.local_rank, NUM_SEQUENCES, int(os.environ["WORLD_SIZE"]))
     # ]
 
-    sequence_indices = [i for i in range(args.local_rank, NUM_SEQUENCES, 1)]
+    sequence_indices = [i for i in range(0, NUM_SEQUENCES, 1)]
 
     env = make_env(args.calvin_dataset_path, show_gui=False)
     evaluate_policy(model, env,
