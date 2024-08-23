@@ -62,6 +62,8 @@ if __name__ == "__main__":
     args = Arguments().parse_args()
     print(args)
 
+    print('loading path is', str(args.annotation_path))
+
     annotations = np.load(str(args.annotation_path), allow_pickle=True).item()
     instructions_string = [s + '.' for s in annotations['language']['ann']]
 

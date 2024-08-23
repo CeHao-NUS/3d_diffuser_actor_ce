@@ -121,7 +121,7 @@ def evaluate_policy(model, env, conf_dir, eval_log_dir=None, save_video=False,
             env, model, task_oracle, initial_state,
             eval_sequence, val_annotations, save_video
         )
-        write_results(eval_log_dir, seq_ind, result)
+        write_results(eval_log_dir, seq_ind, result, eval_sequence[0], val_annotations[eval_sequence[0]])
         results.append(result)
         str_results = (
             " ".join([f"{i + 1}/5 : {v * 100:.1f}% |"
@@ -181,18 +181,31 @@ def evaluate_sequence(env, model, task_checker, initial_state, eval_sequence,
     for subtask in eval_sequence:
         # get lang annotation for subtask
         lang_annotation = val_annotations[subtask][0]
+        # if not subtask == 'push_pink_block_right':
+        #     break
+
+        '''
+        push_pink_block_right
+        push_blue_block_right
+        push_red_block_right
+        '''
+
+        # use_inpainting = (success_counter==0)
+        use_inpainting = True
         success, video = rollout(env, model, task_checker,
-                                 subtask, lang_annotation)
+                                 subtask, lang_annotation, use_inpainting= use_inpainting)
         video_aggregators.append(video)
 
         if success:
             success_counter += 1
         else:
             return success_counter, video_aggregators
+        
+        break
     return success_counter, video_aggregators
 
 
-def rollout(env, model, task_oracle, subtask, lang_annotation):
+def rollout(env, model, task_oracle, subtask, lang_annotation, use_inpainting=False):
     """
     Run the actual rollout on one subtask (which is one natural language instruction).
 
@@ -209,13 +222,60 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
     """
     video = [] # show video for debugging
     obs = env.get_obs()
+    start_obs = obs.copy()
 
     model.reset()
     start_info = env.get_info()
 
-    print('------------------------------')
-    print(f'task: {lang_annotation}')
-    video.append(obs["rgb_obs"]["rgb_static"])
+    # print('------------------------------')
+    # print(f'task: {lang_annotation}')
+    # video.append(obs["rgb_obs"]["rgb_static"])
+
+    # if use_inpainting:
+
+    #     obj_list =['red', 'blue', 'pink', 'sliding', 'drawer','button', 'turn on the light bulb']
+    #     obj_poses = {
+    #         'red': obs["scene_obs"][6:9],
+    #         'blue': obs["scene_obs"][12:15],
+    #         'pink': obs["scene_obs"][18:21],
+    #         'sliding': np.array([-0.08679207, -0.0115027 ,  0.54333853]),
+    #         'drawer': np.array([0.1826129 , -0.31640463,  0.374497]),
+    #         'turn on the light bulb': np.array([0.24155065, 0.03409243, 0.55943577]),
+    #         'button': np.array([-0.10994109, -0.12844143,  0.48871266]),
+    #         }
+        
+    #     '''
+    #     turn on the lightbulb / target pose
+    #     [ 0.2917001 , -0.0173986 ,  0.54783777]
+
+    #     turn off lightbulb / target pose
+    #     [0.24155065, 0.03409243, 0.55943577]
+    #     '''
+    #     target_obj = None
+    #     target_obj_list = []
+    #     for obj in obj_list:
+    #         if obj in lang_annotation:
+    #             target_obj_list.append(obj)
+                
+    #     if len(target_obj_list) == 1:
+    #         target_obj = target_obj_list[0]
+    #     elif len(target_obj_list) > 1:
+    #         print('!!! multiple target objects:', target_obj_list)
+        
+    #     if 'grasped' in lang_annotation:
+    #         target_obj =  None
+    #         print('!!! grasped object')
+
+    #     if 'block' in lang_annotation and target_obj in ['drawer', 'sliding']:
+    #         target_obj = None
+    #         print('!!! block object to container')
+            
+    #     if target_obj is not None:
+    #         print('!!! target object:', target_obj)
+    #     else:
+    #         print('!!! no target object')
+
+    #     pre_leading = True
 
     pbar = tqdm(range(EP_LEN))
     for step in pbar:
@@ -224,6 +284,7 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
         lang_embeddings = model.encode_instruction(lang_annotation, model.args.device)
         with torch.cuda.amp.autocast():
             trajectory = model.step(obs, lang_embeddings)
+
         for act_ind in range(min(trajectory.shape[1], EXECUTE_LEN)):
             # calvin_env executes absolute action in the format of:
             # [[x, y, z], [euler_x, euler_y, euler_z], [open]]
@@ -232,10 +293,36 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
                 trajectory[0, act_ind, 3:6],
                 trajectory[0, act_ind, [6]]
             ]
+
+            # if use_inpainting:
+            #     # change as the object is:
+            #     if pre_leading and target_obj is not None:
+                    
+            #         to_obj_dist = np.linalg.norm(curr_action[0] - obj_poses[target_obj])
+            #         if to_obj_dist < 0.1:
+            #             pre_leading = False
+            #             print('the object is leading now')
+            #         else:
+            #             ratio = 0.1
+            #             curr_action[0] = ratio * curr_action[0] + (1 - ratio) * obj_poses[target_obj]
+
+
             pbar.set_description(f"step: {step}")
             curr_proprio = obs['proprio']
             obs, _, _, current_info = env.step(curr_action)
             obs['proprio'] = curr_proprio
+
+            # check if scene in start info is different from current info.
+            change = start_obs["scene_obs"] - obs["scene_obs"]
+            change_diff = np.linalg.norm(change)
+
+            no_change = change_diff < 0.1
+            if not no_change:
+                # print('the state changed now', np.where(np.abs(change)>0.01))
+                a = 1
+
+
+
 
             # check if current step solves a task
             current_task_info = task_oracle.get_task_info_for_set(
@@ -245,6 +332,7 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
             video.append(obs["rgb_obs"]["rgb_static"])
 
             if len(current_task_info) > 0:
+                print('*** task successful***')
                 return True, video
 
     return False, video
@@ -285,8 +373,12 @@ def main(args):
     # evaluate a custom model
     model = create_model(args)
 
+    # sequence_indices = [
+    #     i for i in range(args.local_rank, NUM_SEQUENCES, int(os.environ["WORLD_SIZE"]))
+    # ]
+
     sequence_indices = [
-        i for i in range(args.local_rank, NUM_SEQUENCES, int(os.environ["WORLD_SIZE"]))
+        i for i in range(0, NUM_SEQUENCES, 1)
     ]
 
     env = make_env(args.calvin_dataset_path, show_gui=False)
@@ -309,13 +401,13 @@ def main(args):
 
 if __name__ == "__main__":
     args = Arguments().parse_args()
-    args.local_rank = int(os.environ["LOCAL_RANK"])
+    # args.local_rank = int(os.environ["LOCAL_RANK"])
 
     # DDP initialization
-    torch.cuda.set_device(args.local_rank)
-    torch.distributed.init_process_group(backend='nccl', init_method='env://')
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.deterministic = True
+    # torch.cuda.set_device(args.local_rank)
+    # torch.distributed.init_process_group(backend='nccl', init_method='env://')
+    # torch.backends.cudnn.enabled = True
+    # torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.deterministic = True
 
     main(args)
