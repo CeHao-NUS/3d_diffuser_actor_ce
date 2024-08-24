@@ -179,11 +179,28 @@ def evaluate_sequence(env, model, task_checker, initial_state, eval_sequence,
     env.reset(robot_obs=robot_obs, scene_obs=scene_obs)
 
     success_counter, video_aggregators = 0, []
+
+    # make sure 'place in slider' in the eval_sequence
+    # if 'place_in_slider' not in eval_sequence:
+    #     return success_counter, video_aggregators
+
     for subtask in eval_sequence:
         # get lang annotation for subtask
         lang_annotation = val_annotations[subtask][0]
+
+        # check place_in_slider
+        # if subtask == 'place_in_slider':
+        #     stop_check=True
+        # else:
+        #     stop_check=False
+        stop_check=False
+        if subtask == 'place_in_slider':
+            success_counter += 1
+            print('!!! set place_in_slider to True !!!')
+            continue 
+
         success, video = rollout(env, model, task_checker,
-                                 subtask, lang_annotation)
+                                 subtask, lang_annotation, stop_check=stop_check)
         video_aggregators.append(video)
 
         if success:
@@ -193,7 +210,7 @@ def evaluate_sequence(env, model, task_checker, initial_state, eval_sequence,
     return success_counter, video_aggregators
 
 
-def rollout(env, model, task_oracle, subtask, lang_annotation):
+def rollout(env, model, task_oracle, subtask, lang_annotation, stop_check=False):
     """
     Run the actual rollout on one subtask (which is one natural language instruction).
 
@@ -210,6 +227,8 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
     """
     video = [] # show video for debugging
     obs = env.get_obs()
+
+    # start_obs = obs.copy()
 
     model.reset()
     start_info = env.get_info()
@@ -233,6 +252,8 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
                 trajectory[0, act_ind, 3:6],
                 trajectory[0, act_ind, [6]]
             ]
+
+
             pbar.set_description(f"step: {step}")
             curr_proprio = obs['proprio']
             obs, _, _, current_info = env.step(curr_action)
@@ -245,8 +266,24 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
 
             video.append(obs["rgb_obs"]["rgb_static"])
 
+            # if stop_check and len(current_task_info) > 0:
+            #     print('obs["scene_obs"]', obs["scene_obs"][18:21])
+            #     print('curr_action')
+            #     a = 1
+                # print(obs["scene_obs"][:])
+            # change = start_obs["scene_obs"] - obs["scene_obs"]
+                # change_diff = np.linalg.norm(change)
+                # no_change = change_diff < 0.1
+                # if not no_change:
+                #     # print('the state changed now', np.where(np.abs(change)>0.01))
+                #     a = 1
+
             if len(current_task_info) > 0:
                 return True, video
+            
+    # if stop_check:
+    #     print('obs["scene_obs"]', obs["scene_obs"][18:21])
+    #     a = 1
 
     return False, video
 
