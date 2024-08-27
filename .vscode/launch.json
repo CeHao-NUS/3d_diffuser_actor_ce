@@ -37,7 +37,8 @@
                 "--base_log_dir", "train_logs/Planner_Calvin/eval_logs_seedx/",
                 "--quaternion_format", "wxyz",
                 "--checkpoint", "train_logs/diffuser_actor_calvin_nohistory.pth",
-                "--seed", "0"
+                "--seed", "0",
+                "--save_video", "1",
             ]
         }
     ]
