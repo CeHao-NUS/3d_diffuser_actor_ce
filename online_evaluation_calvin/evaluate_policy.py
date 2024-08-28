@@ -209,8 +209,8 @@ def evaluate_sequence(env, model, task_checker, initial_state, eval_sequence,
         # get lang annotation for subtask
         lang_annotation = val_annotations[subtask][0]
 
-        # if finished:
-        #     break
+        if finished:
+            break
 
         # check place_in_slider
         if subtask == 'place_in_slider':
