@@ -78,8 +78,8 @@ python online_evaluation_calvin/evaluate_policy.py \
     --fps_subsampling_factor 3 \
     --lang_enhanced 1 \
     --save_video 0 \
-    --base_log_dir train_logs/Planner_Calvin/eval_logs_vis_showxx/ \
+    --base_log_dir train_logs/Planner_Calvin/eval_logs_push/ \
     --quaternion_format wxyz \
     --checkpoint train_logs/diffuser_actor_calvin_nohistory.pth \
     --seed 0 \
-    --save_video 1 
+    --save_video 0
