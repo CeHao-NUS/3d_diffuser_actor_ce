@@ -121,7 +121,8 @@ def evaluate_policy(model, env, conf_dir, eval_log_dir=None, save_video=False,
             env, model, task_oracle, initial_state,
             eval_sequence, val_annotations, save_video
         )
-        write_results(eval_log_dir, seq_ind, result)
+        report_index = result if result < 5 else 4
+        write_results(eval_log_dir, seq_ind, result, eval_sequence[report_index], val_annotations[eval_sequence[report_index]])
         results.append(result)
         str_results = (
             " ".join([f"{i + 1}/5 : {v * 100:.1f}% |"
@@ -136,6 +137,7 @@ def evaluate_policy(model, env, conf_dir, eval_log_dir=None, save_video=False,
             import cv2
             for task_ind, (subtask, video) in enumerate(zip(eval_sequence, videos)):
                 for img_ind, img in enumerate(video):
+                    img = np.ascontiguousarray(img)
                     cv2.putText(img,
                                 f'{task_ind}: {subtask}',
                                 (10, 180),
@@ -146,9 +148,13 @@ def evaluate_policy(model, env, conf_dir, eval_log_dir=None, save_video=False,
                                 2)
                     video[img_ind] = img
                 clip.extend(video)
-            clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(clip, fps=30)
-            clip.write_videofile(f"calvin_seq{seq_ind}.mp4")
-
+            
+            if clip == []:
+                continue
+            clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(clip, fps=90)
+            if not os.path.exists('./videos'):
+                os.makedirs('./videos')
+            clip.write_videofile(f"./videos/calvin_seq{seq_ind}.mp4")
 
     return results
 
@@ -178,11 +184,65 @@ def evaluate_sequence(env, model, task_checker, initial_state, eval_sequence,
     env.reset(robot_obs=robot_obs, scene_obs=scene_obs)
 
     success_counter, video_aggregators = 0, []
+
+    # make sure 'place in slider' in the eval_sequence
+    # if 'place_in_slider' not in eval_sequence:
+    #     return success_counter, video_aggregators
+
+    # task_list = ['lift_red_block_slider', 'lift_pink_block_slider', 'lift_blue_block_slider']
+    # def check_any_in_b(a, b):
+    #     for element in a:
+    #         if element in b:
+    #             return True
+    #     return False
+    
+    # def check_any_equal_b(a, b):
+    #     for element in a:
+    #         if element == b:
+    #             return True
+        # return False
+
+    # def check_a_in_any_b(a, b):
+    #     for element in b:
+    #         if a in element:
+    #             return True
+    #     return False
+
+    # if not "push" in eval_sequence[0]:
+    #     return success_counter, video_aggregators
+
+    # if not check_any_equal_b(task_list, eval_sequence[0]):
+    #     return success_counter, video_aggregators
+
+    finished = False
+
     for subtask in eval_sequence:
         # get lang annotation for subtask
         lang_annotation = val_annotations[subtask][0]
+
+        # if finished:
+        #     break
+
+        '''
+        # check place_in_slider
+        if subtask == 'place_in_slider':
+        # if "block_slider" in subtask:
+            stop_check=True
+            finished = True
+        else:
+            stop_check=False
+
+        '''
+
+        if 'push' in subtask and 'block' in subtask:
+            stop_check = True
+
+        # stop_check = True
+        # if success_counter == 1: # only run the first task
+        #     break
+
         success, video = rollout(env, model, task_checker,
-                                 subtask, lang_annotation)
+                                 subtask, lang_annotation, stop_check=stop_check)
         video_aggregators.append(video)
 
         if success:
@@ -192,7 +252,7 @@ def evaluate_sequence(env, model, task_checker, initial_state, eval_sequence,
     return success_counter, video_aggregators
 
 
-def rollout(env, model, task_oracle, subtask, lang_annotation):
+def rollout(env, model, task_oracle, subtask, lang_annotation, stop_check=False):
     """
     Run the actual rollout on one subtask (which is one natural language instruction).
 
@@ -209,6 +269,25 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
     """
     video = [] # show video for debugging
     obs = env.get_obs()
+
+    start_obs = obs.copy()
+    num_target_pose = 0
+
+    check_now = stop_check
+    now_init = True
+    if stop_check:
+        # use the inpainting
+        use_inpainting = False
+
+        if subtask == 'place_in_slider':
+            # 1. check closed to left, or right?
+            left_silder = obs["scene_obs"][0] > 0.14
+
+            if left_silder:
+                target_pos = np.array([[0.05, 0.01, 0.49], [0.05, 0.07, 0.49]])
+            else:
+                target_pos = np.array([[-0.20, 0.01, 0.49], [-0.20, 0.07, 0.49]])
+       
 
     model.reset()
     start_info = env.get_info()
@@ -232,6 +311,69 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
                 trajectory[0, act_ind, 3:6],
                 trajectory[0, act_ind, [6]]
             ]
+
+
+            if check_now:
+                
+                transition = 100
+
+                def get_dist(obs):
+                    obj_idx_list = [[6, 7, 8], [12, 13, 14], [18, 19, 20]] # red, blue, pink
+                    dist_list = []
+                    obj_pos_list = []
+                    for obj_idx in obj_idx_list:
+                        obj_pos = obs["scene_obs"][obj_idx]
+                        ee_pos = obs["robot_obs"][:3]
+                        dist = np.linalg.norm(obj_pos[:2] - ee_pos[:2])
+
+
+                        obj_pos_list.append(obj_pos)
+                        dist_list.append(dist)
+                    return obj_pos_list, ee_pos, dist_list
+                
+                obj_pos_list, ee_pos, dist_list = get_dist(obs)
+                dist = np.min(dist_list)
+
+
+                # '''
+
+                if now_init and dist < 0.05 and obs["robot_obs"][-1] == -1:
+                    use_inpainting = True
+                    now_init = False
+                    threshold = [0.02, 0.02]
+
+                    if 'push' in subtask and 'block' in subtask: # the push task
+                        if 'left' in subtask:
+                            target_pos = ee_pos + np.array([-0.1, 0.1, 0])
+                        elif 'right' in subtask:
+                            target_pos = ee_pos + np.array([0.1, 0.1, 0])
+
+                        target_pos = np.array([target_pos, target_pos])
+
+                if use_inpainting:
+                # 3. check if too close to target
+                    curr_gripper_loc = obs['robot_obs'][:3]
+
+                    if num_target_pose == 0:
+                        dist_reach_goal = np.linalg.norm(curr_gripper_loc[:2] - target_pos[num_target_pose][:2]) # x and y
+                    elif num_target_pose == 1:
+                        dist_reach_goal = np.abs(curr_gripper_loc[1] - target_pos[num_target_pose][1]) # y
+
+                    # print(dist_reach_goal)
+                    if dist_reach_goal < threshold[num_target_pose]:
+                        print('Reach the target position {}'.format(num_target_pose))
+                        num_target_pose += 1
+                        if num_target_pose == 2:
+                            use_inpainting = False
+                            curr_action[-1] = [1]
+                    else:
+                        # 4. change the action
+                        ratio =  min(max(0.02 / dist_reach_goal, 0.2), 1)
+                        curr_action[0] = ratio * target_pos[num_target_pose] + (1 - ratio) * curr_gripper_loc
+                        curr_action[-1] = [-1]
+                # '''
+                
+
             pbar.set_description(f"step: {step}")
             curr_proprio = obs['proprio']
             obs, _, _, current_info = env.step(curr_action)
@@ -244,8 +386,42 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
 
             video.append(obs["rgb_obs"]["rgb_static"])
 
+            # if 'pink' in subtask:
+            #     obj_idx = [18, 19, 20]
+            # elif 'blue' in subtask:
+            #     obj_idx = [12, 13, 14]
+            # elif 'red' in subtask:
+            #     obj_idx = [6, 7, 8]
+
+            # start_obs_obj = start_obs["scene_obs"][obj_idx]
+            # obs_obj = obs["scene_obs"][obj_idx]
+            # change = start_obs_obj - obs_obj
+            # change_diff = np.linalg.norm(change)
+
+            # all_change = start_obs["scene_obs"] - obs["scene_obs"]
+            '''
+            start_obs["scene_obs"][0]
+            start_obs["scene_obs"][obj_idx]
+            obs["scene_obs"][obj_idx]
+            curr_action[0]
+
+            obj_idx = [18, 19, 20]
+            obj_pos = obs["scene_obs"][obj_idx]
+            ee_pos = obs["robot_obs"][:3]
+            dist = np.linalg.norm(obj_pos - ee_pos)
+            print(dist)
+            '''
+                
+
+            if stop_check and len(current_task_info) > 0:
+                a = 1
+
             if len(current_task_info) > 0:
                 return True, video
+            
+    if stop_check:
+        # print('obs["scene_obs"]', obs["scene_obs"])
+        a = 1
 
     return False, video
 
@@ -285,9 +461,11 @@ def main(args):
     # evaluate a custom model
     model = create_model(args)
 
-    sequence_indices = [
-        i for i in range(args.local_rank, NUM_SEQUENCES, int(os.environ["WORLD_SIZE"]))
-    ]
+    # sequence_indices = [
+    #     i for i in range(args.local_rank, NUM_SEQUENCES, int(os.environ["WORLD_SIZE"]))
+    # ]
+
+    sequence_indices = [i for i in range(0, NUM_SEQUENCES, 1)]
 
     env = make_env(args.calvin_dataset_path, show_gui=False)
     evaluate_policy(model, env,
@@ -309,13 +487,13 @@ def main(args):
 
 if __name__ == "__main__":
     args = Arguments().parse_args()
-    args.local_rank = int(os.environ["LOCAL_RANK"])
+    # args.local_rank = int(os.environ["LOCAL_RANK"])
 
     # DDP initialization
-    torch.cuda.set_device(args.local_rank)
-    torch.distributed.init_process_group(backend='nccl', init_method='env://')
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.deterministic = True
+    # torch.cuda.set_device(args.local_rank)
+    # torch.distributed.init_process_group(backend='nccl', init_method='env://')
+    # torch.backends.cudnn.enabled = True
+    # torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.deterministic = True
 
     main(args)

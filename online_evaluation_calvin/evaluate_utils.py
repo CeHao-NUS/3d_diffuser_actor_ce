@@ -308,15 +308,16 @@ def collect_results(log_dir):
 
     results, seq_inds = [], []
     for line in lines:
-        seq, res= line.split(" ")
+        line_element = line.split(" ")
+        seq, res = line_element[0], line_element[1]
         results.append(int(res))
         seq_inds.append(int(seq))
 
     return results, seq_inds
 
 
-def write_results(log_dir, seq_ind, result):
+def write_results(log_dir, seq_ind, result, task='', lang=''):
     """Write the number of completed tasks of each instruction chain to a file.
     """
     with open(log_dir / f"result.txt", "a") as write_file:
-        write_file.write(f"{seq_ind} {result}\n")
+        write_file.write(f"{seq_ind} {result} {task} {lang}\n")
